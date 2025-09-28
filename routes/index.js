@@ -1,5 +1,6 @@
 const express = require('express');
 const authRoutes = require('./auth');
+const productRoutes = require('./products');
 
 const routes = express.Router();
 
@@ -10,7 +11,7 @@ routes.get('/ping', (req, res) => {
 
 // Rotas
 routes.use('/auth', authRoutes);
-
+routes.use('/products', productRoutes);
 
 routes.get('/', (req, res) => {
   return res.send('API Cafeteria rodando');

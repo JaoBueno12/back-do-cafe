@@ -21,6 +21,16 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Senha é obrigatória'],
     minlength: [6, 'Senha deve ter pelo menos 6 caracteres']
   },
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'suspended'],
+    default: 'active'
+  },
+  role: {
+    type: String,
+    enum: ['customer', 'admin', 'staff'],
+    default: 'customer'
+  }
 }, {
   timestamps: true
 });

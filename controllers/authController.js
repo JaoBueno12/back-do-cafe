@@ -1,4 +1,5 @@
 const jwt = require('jsonwebtoken');
+const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 
 // Gerar token JWT
@@ -10,11 +11,35 @@ const generateToken = (userId) => {
   );
 };
 
+// Validações para registro
+exports.validateRegister = [
+  body('name')
+    .trim()
+    .isLength({ min: 2 })
+    .withMessage('Nome deve ter pelo menos 2 caracteres'),
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Email inválido'),
+  body('password')
+    .isLength({ min: 6 })
+    .withMessage('Senha deve ter pelo menos 6 caracteres')
+];
+
 // @desc    Registrar novo usuário
 // @route   POST /api/auth/register
 // @access  Public
 exports.register = async (req, res) => {
   try {
+    // Verificar erros de validação
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: errors.array()
+      });
+    }
+
     const { name, email, password } = req.body;
 
     // Verificar se usuário já existe
@@ -22,9 +47,7 @@ exports.register = async (req, res) => {
 
     if (existingUser) {
       return res.status(400).json({
-        message: existingUser.email === email 
-          ? 'Email já está em uso' 
-          : 'Matrícula já está em uso'
+        message: 'Email já está em uso'
       });
     }
 
@@ -43,15 +66,38 @@ exports.register = async (req, res) => {
     });
   } catch (error) {
     console.error('Erro no registro:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email já está em uso' });
+    }
     res.status(500).json({ message: 'Erro interno do servidor' });
   }
 };
+
+// Validações para login
+exports.validateLogin = [
+  body('email')
+    .isEmail()
+    .normalizeEmail()
+    .withMessage('Email inválido'),
+  body('password')
+    .notEmpty()
+    .withMessage('Senha é obrigatória')
+];
 
 // @desc    Login do usuário
 // @route   POST /api/auth/login
 // @access  Public
 exports.login = async (req, res) => {
   try {
+    // Verificar erros de validação
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: 'Dados inválidos',
+        errors: errors.array()
+      });
+    }
+
     const { email, password } = req.body;
 
     // Verificar se usuário existe

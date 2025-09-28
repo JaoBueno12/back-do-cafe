@@ -1,7 +1,6 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
 const mongoose = require("mongoose");
 
 const routes = require("./routes");
@@ -9,7 +8,10 @@ const routes = require("./routes");
 const app = express();
 
 // CORS
-app.use(cors());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:8081',
+  credentials: true
+}));
 
 // Habilitar o parser de JSON em todas as rotas
 app.use(express.json());
@@ -21,15 +23,6 @@ app.get("/", (req, res) => {
 
 // Usar rotas
 app.use('/api', routes);
-
-// Static (not used currently)
-// app.use("/files", express.static(path.resolve(__dirname, "Uploads")));
-
-// Rota de teste
-app.get("/ping", (req, res) => {
-  console.log("recebeu ping");
-  res.send("pong");
-});
 
 // Middleware de tratamento de erros
 app.use((err, req, res, next) => {
