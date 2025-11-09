@@ -1,24 +1,42 @@
+// backend/middleware/auth.js
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
 
-exports.auth = async (req, res, next) => {
-  try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
-    
-    if (!token) {
-      return res.status(401).json({ message: 'Acesso negado. Token não fornecido.' });
-    }
+// Middleware para proteger rotas
+const protect = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'senac-portal-aluno-secret-key-2024');
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (!user) {
-      return res.status(401).json({ message: 'Token inválido.' });
-    }
-
-    req.user = user;
-    next();
-  } catch (error) {
-    res.status(401).json({ message: 'Token inválido.' });
+  if (!token) {
+    return res.status(401).json({ message: 'Token não fornecido' });
   }
+
+  if (!process.env.JWT_SECRET) {
+    return res.status(500).json({ message: 'Erro de configuração do servidor' });
+  }
+  
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) {
+      return res.status(403).json({ message: 'Token inválido ou expirado' });
+    }
+    
+    req.user = user; // { id, email, role }
+    next();
+  });
 };
+
+// Middleware para autorizar papéis específicos
+const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({ message: 'Não autorizado' });
+    }
+
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ message: 'Acesso negado' });
+    }
+
+    next();
+  };
+};
+
+module.exports = { protect, authorize, authenticateToken: protect };

@@ -21,6 +21,27 @@ const userSchema = new mongoose.Schema({
     required: [true, 'Senha é obrigatória'],
     minlength: [6, 'Senha deve ter pelo menos 6 caracteres']
   },
+  registration: {
+    type: String,
+    required: [true, 'Matrícula é obrigatória'],
+    unique: true,
+    trim: true
+  },
+  course: {
+    type: String,
+    required: [true, 'Curso é obrigatório'],
+    trim: true
+  },
+  semester: {
+    type: Number,
+    required: [true, 'Semestre é obrigatório'],
+    min: [1, 'Semestre deve ser pelo menos 1'],
+    max: [10, 'Semestre deve ser no máximo 10']
+  },
+  avatar: {
+    type: String,
+    default: null
+  },
   status: {
     type: String,
     enum: ['active', 'inactive'],
@@ -28,9 +49,9 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
-  },
+    enum: ['student', 'teacher', 'admin'],
+    default: 'student'
+  }
 }, {
   timestamps: true
 });
@@ -38,7 +59,7 @@ const userSchema = new mongoose.Schema({
 // Hash da senha antes de salvar
 userSchema.pre('save', async function(next) {
   if (!this.isModified('password')) return next();
-  
+
   try {
     const salt = await bcrypt.genSalt(12);
     this.password = await bcrypt.hash(this.password, salt);

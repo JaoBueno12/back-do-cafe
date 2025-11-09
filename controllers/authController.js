@@ -1,104 +1,175 @@
-const jwt = require('jsonwebtoken');
+// backend/controllers/authController.js
 const User = require('../models/User');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const { isValidEmail, sanitizeString } = require('../utils/validators');
 
-// Gerar token JWT
-const generateToken = (userId) => {
-  return jwt.sign(
-    { userId },
-    process.env.JWT_SECRET || 'senac-portal-aluno-secret-key-2024',
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
-  );
-};
-
-// @desc    Registrar novo usuário
-// @route   POST /api/auth/register
-// @access  Public
-exports.register = async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-
-    // Verificar se usuário já existe
-    const existingUser = await User.findOne({ email });
-
-    if (existingUser) {
-      return res.status(400).json({
-        message: existingUser.email === email 
-          ? 'Email já está em uso' 
-          : 'Matrícula já está em uso'
-      });
-    }
-
-    // Criar novo usuário
-    const user = new User({ name, email, password });
-
-    await user.save();
-
-    // Gerar token
-    const token = generateToken(user._id);
-
-    res.status(201).json({
-      message: 'Usuário registrado com sucesso!',
-      token,
-      user: { id: user._id, name: user.name, email: user.email, status: user.status, role: user.role }
-    });
-  } catch (error) {
-    console.error('Erro no registro:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+// Função para gerar matrícula automática
+const generateRegistration = async (maxAttempts = 10) => {
+  const year = new Date().getFullYear().toString().slice(-2); // Últimos 2 dígitos do ano
+  
+  // Buscar a última matrícula do ano atual
+  const lastUser = await User.findOne({ 
+    registration: new RegExp(`^${year}`) 
+  }).sort({ registration: -1 });
+  
+  let sequence = 1;
+  if (lastUser && lastUser.registration) {
+    // Extrair o número sequencial da última matrícula (últimos 5 dígitos)
+    const lastSeq = parseInt(lastUser.registration.slice(-5)) || 0;
+    sequence = lastSeq + 1;
   }
+  
+  // Tentar gerar matrícula única
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    // Formato: AANNNNN (ex: 2400001, 2400002, etc) - 2 dígitos do ano + 5 dígitos sequenciais
+    const registration = `${year}${sequence.toString().padStart(5, '0')}`;
+    
+    // Verificar se a matrícula já existe
+    const exists = await User.findOne({ registration });
+    if (!exists) {
+      return registration;
+    }
+    
+    // Se existir, incrementar e tentar novamente
+    sequence += 1;
+  }
+  
+  // Se não conseguir gerar após várias tentativas, lançar erro
+  throw new Error('Não foi possível gerar matrícula única após várias tentativas');
 };
 
-// @desc    Login do usuário
-// @route   POST /api/auth/login
-// @access  Public
+// Registrar novo usuário (DESABILITADO - apenas admins podem criar usuários)
+exports.register = async (req, res) => {
+  return res.status(403).json({ 
+    message: 'Cadastro público desabilitado. Entre em contato com o administrador para criar uma conta.' 
+  });
+};
+
+// Login
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Verificar se usuário existe
-    const user = await User.findOne({ email });
+    // Validações básicas
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email e senha são obrigatórios' });
+    }
+
+    // Validar formato do email
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ message: 'Email inválido' });
+    }
+
+    // Buscar usuário
+    const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
 
     // Verificar senha
-    const isPasswordValid = await user.comparePassword(password);
-    if (!isPasswordValid) {
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
       return res.status(401).json({ message: 'Credenciais inválidas' });
     }
 
-    // Verificar se usuário está ativo
-    if (user.status !== 'active') {
-      return res.status(401).json({ message: 'Conta desativada. Entre em contato com o administrador.' });
-    }
-
     // Gerar token
-    const token = generateToken(user._id);
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET não configurado');
+    }
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    const userData = user.toObject();
+    delete userData.password;
 
     res.json({
-      message: 'Login realizado com sucesso!',
+      message: 'Login realizado com sucesso',
       token,
-      user: { id: user._id, name: user.name, email: user.email, status: user.status, role: user.role }
+      user: userData,
     });
   } catch (error) {
-    console.error('Erro no login:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('Erro ao fazer login:', error);
+    res.status(500).json({ message: error.message || 'Erro ao fazer login' });
   }
 };
 
-// @desc    Obter perfil do usuário logado
-// @route   GET /api/auth/me
-// @access  Private
+// Buscar dados do usuário autenticado
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('-password');
-    
+    const user = await User.findById(req.user.id).select('-password');
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado' });
     }
-
-    res.json({ user });
+    res.json({
+      success: true,
+      user
+    });
   } catch (error) {
-    console.error('Erro ao obter perfil:', error);
-    res.status(500).json({ message: 'Erro interno do servidor' });
+    console.error('Erro ao buscar usuário:', error);
+    res.status(500).json({ message: 'Erro ao buscar usuário' });
+  }
+};
+
+// Atualizar perfil do usuário autenticado
+exports.updateMe = async (req, res) => {
+  try {
+    const { name, course, semester } = req.body;
+    const userId = req.user.id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Usuário não encontrado' 
+      });
+    }
+
+    // Atualizar apenas campos permitidos
+    if (name) user.name = name.trim();
+    if (course) user.course = course.trim();
+    if (semester !== undefined) user.semester = parseInt(semester) || 1;
+
+    await user.save();
+
+    // Gerar novo token
+    if (!process.env.JWT_SECRET) {
+      throw new Error('JWT_SECRET não configurado');
+    }
+    const token = jwt.sign(
+      { id: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
+
+    const userData = user.toObject();
+    delete userData.password;
+
+    res.json({
+      success: true,
+      message: 'Perfil atualizado com sucesso',
+      user: userData,
+      token
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar perfil:', error);
+    
+    if (error.name === 'ValidationError') {
+      const errors = Object.values(error.errors).map(e => e.message);
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        errors
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Erro ao atualizar perfil',
+      error: error.message 
+    });
   }
 };

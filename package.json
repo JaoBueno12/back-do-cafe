@@ -1,25 +1,25 @@
 {
-  "name": "cafeteria-backend",
+  "name": "portal-aluno-backend",
   "version": "1.0.0",
-  "description": "Backend API da Cafeteria (Express + MongoDB)",
+  "description": "Backend API para o Portal do Aluno SENAC",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "nodemon --config nodemon.json",
     "start": "node index.js",
     "seed": "node scripts/seed.js",
-    "test:connection": "node scripts/test-connection.js",
-    "test:registration": "node scripts/test-registration.js"
+    "seed:courses": "node scripts/seedCourses.js",
+    "test:connection": "node scripts/test-connection.js"
   },
   "keywords": [
-    "cafeteria",
-    "menu",
-    "orders",
+    "portal-aluno",
+    "senac",
     "api",
-    "express",
-    "mongodb"
+    "backend",
+    "Nodejs",
+    "MongoDB"
   ],
-  "author": "",
+  "author": "SENAC",
   "license": "ISC",
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -30,7 +30,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongodb": "^6.17.0",
     "mongoose": "^8.16.0",
-    "multer": "^2.0.1"
+    "multer": "^2.0.1",
+    "nodemailer": "^6.10.1"
   },
   "devDependencies": {
     "node-fetch": "^2.7.0",
